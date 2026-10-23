@@ -1,69 +1,116 @@
-import Image from "next/image";
+"use client";
+
+import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { useReadContract, useWriteContract } from "wagmi";
+import { parseEther, formatEther } from "viem";
+import { useState } from "react";
+import { CRYPTO_BANK_ADDRESS, CRYPTO_BANK_ABI } from "@/contracts/cryptoBank";
 
 export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+  const { address, isConnected } = useAccount();
+  const { connect, connectors } = useConnect();
+  const { disconnect } = useDisconnect();
+  const [depositAmount, setDepositAmount] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+
+  const { data: ethBalance, refetch: refetchBalance } = useReadContract({
+    address: CRYPTO_BANK_ADDRESS,
+    abi: CRYPTO_BANK_ABI,
+    functionName: "ethBalances",
+    args: address ? [address] : undefined,
+  });
+
+  const { writeContract } = useWriteContract();
+
+  if (!isConnected) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <button
+          onClick={() => connect({ connector: connectors[0] })}
+          className="bg-blue-600 text-white px-6 py-3 rounded-lg text-lg hover:bg-blue-700"
+        >
+          Conectar Wallet
+        </button>
       </main>
-    </div>
+    );
+  }
+
+  return (
+    <main className="min-h-screen p-8 max-w-2xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
+        <p className="text-sm font-mono">{address}</p>
+        <button
+          onClick={() => disconnect()}
+          className="text-red-500 hover:underline"
+        >
+          Desconectar
+        </button>
+      </div>
+
+      <h1 className="text-3xl font-bold mb-8">CryptoBank</h1>
+
+      <div className="bg-gray-900 rounded-lg p-6 mb-6">
+        <h2 className="text-xl mb-2">Tu balance en el banco</h2>
+        <p className="text-4xl font-bold">
+          {ethBalance ? formatEther(ethBalance as bigint) : "0"} ETH
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h3 className="text-lg mb-3">Depositar ETH</h3>
+          <input
+            type="text"
+            placeholder="Cantidad en ETH"
+            value={depositAmount}
+            onChange={(e) => setDepositAmount(e.target.value)}
+            className="w-full bg-gray-700 rounded px-3 py-2 mb-3"
+          />
+          <button
+            onClick={() => {
+              writeContract(
+                {
+                  address: CRYPTO_BANK_ADDRESS,
+                  abi: CRYPTO_BANK_ABI,
+                  functionName: "depositarEth",
+                  value: parseEther(depositAmount),
+                },
+                { onSuccess: () => { refetchBalance(); setDepositAmount(""); } }
+              );
+            }}
+            className="w-full bg-green-600 py-2 rounded hover:bg-green-700"
+          >
+            Depositar
+          </button>
+        </div>
+
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h3 className="text-lg mb-3">Retirar ETH</h3>
+          <input
+            type="text"
+            placeholder="Cantidad en ETH"
+            value={withdrawAmount}
+            onChange={(e) => setWithdrawAmount(e.target.value)}
+            className="w-full bg-gray-700 rounded px-3 py-2 mb-3"
+          />
+          <button
+            onClick={() => {
+              writeContract(
+                {
+                  address: CRYPTO_BANK_ADDRESS,
+                  abi: CRYPTO_BANK_ABI,
+                  functionName: "retirarEth",
+                  args: [parseEther(withdrawAmount)],
+                },
+                { onSuccess: () => { refetchBalance(); setWithdrawAmount(""); } }
+              );
+            }}
+            className="w-full bg-red-600 py-2 rounded hover:bg-red-700"
+          >
+            Retirar
+          </button>
+        </div>
+      </div>
+    </main>
   );
 }
